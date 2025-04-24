@@ -18,6 +18,7 @@ func (tgbot *TGBot) Init(tgbotkey string) {
 	}
 	bot.Debug = true
 	tgbot.Bot = bot
+	log.Printf("Authorized on account %s", bot.Self.UserName)
 }
 
 func RemoveNonUTF8Runes(s string) string {
@@ -38,6 +39,7 @@ func (bot *TGBot) SendMessage(id int, message string) tgbotapi.Message {
 	msg.ParseMode = tgbotapi.ModeMarkdown
 	msg.DisableWebPagePreview = true
 	msg_sended, err := bot.Bot.Send(msg)
+
 	if err != nil {
 		log.Println(err)
 	}
