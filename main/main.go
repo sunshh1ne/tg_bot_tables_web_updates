@@ -27,68 +27,52 @@ type Site struct {
 	url      string
 	data     string
 	users_id string
+	ranges   string
 }
 
 func GenerateID() string {
 	return fmt.Sprintf("%d", time.Now().UnixNano())
 }
 
-func AddUrl(user_id int, url string) string {
+func AddUrl(user_id int, msg string) string {
 	MU.Lock()
 	defer MU.Unlock()
 
-	var sites_id string
-	err := DB.DB.QueryRow("SELECT sites FROM users WHERE user_id = ?;", user_id).Scan(&sites_id)
+	strs := strings.Split(msg, "\n")
+	url := strs[0]
+	ranges := ""
+	if len(strs) > 1 {
+		ranges = strs[1]
+	}
+
+	site_id := GenerateID()
+	data, err := parser.ParseSite(url)
+	flag := true
+	if err != nil {
+		data = "Произошла ошибка при получении данных с сайта"
+		flag = false
+	}
+	_, err = DB.DB.Exec("INSERT INTO sites VALUES (?, ?, ?, ?, ?);", site_id, url, data, user_id, ranges)
 	if err != nil {
 		log.Fatal(err)
 	}
 
+	var sites_id string
+	err = DB.DB.QueryRow("SELECT sites FROM users WHERE user_id=?", user_id).Scan(&sites_id)
+	if err != nil {
+		log.Fatal(err)
+	}
 	sites := strings.Split(sites_id, ",")
 	if len(sites) == 1 && sites[0] == "" {
 		sites = make([]string, 0)
 	}
 	if len(sites) == 15 {
-		return " Ошибка. Уже добавлено слишком много сайтов. "
+		return "❗ Ошибка. Уже добавлено слишком много сайтов. ❗"
 	}
-
-	flag := true
-	var site_id string
-	err = DB.DB.QueryRow("SELECT site_id FROM sites WHERE url = ?;", url).Scan(&site_id)
-	if err != nil {
-		site_id = GenerateID()
-		data, err := parser.ParseSite(url)
-		if err != nil {
-			data = "Произошла ошибка при получении данных с сайта"
-			flag = false
-		}
-
-		_, err = DB.DB.Exec("INSERT INTO sites VALUES (?, ?, ?, '');", site_id, url, data)
-		if err != nil {
-			log.Fatal(err)
-		}
-	}
-
-	var users_id string
-	err = DB.DB.QueryRow("SELECT users FROM sites WHERE site_id = ?;", site_id).Scan(&users_id)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	users := strings.Split(users_id, ",")
-	if len(users) == 1 && users[0] == "" {
-		users = make([]string, 0)
-	}
-	users = append(users, fmt.Sprint(user_id))
-	users_id = strings.Join(users, ",")
-	_, err = DB.DB.Exec("UPDATE sites SET users = ? WHERE site_id = ?;", users_id, site_id)
-	if err != nil {
-		log.Fatal(err)
-	}
-
 	sites = append(sites, site_id)
-	sites_id = strings.Join(sites, ",")
+	sites_str := strings.Join(sites, ",")
 
-	_, err = DB.DB.Exec("UPDATE users SET sites = ? WHERE user_id = ?;", sites_id, user_id)
+	_, err = DB.DB.Exec("UPDATE users SET sites = ? WHERE user_id = ?;", sites_str, user_id)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -104,47 +88,20 @@ func DelUrl(user_id, site_id int, url string) string {
 	MU.Lock()
 	defer MU.Unlock()
 
-	var users_id string
-	err := DB.DB.QueryRow("SELECT users FROM sites WHERE site_id=?", site_id).Scan(&users_id)
+	_, err := DB.DB.Exec("DELETE FROM sites WHERE site_id = ?", site_id)
 	if err != nil {
 		log.Fatal(err)
-		return " Произошла ошибка при получении списка пользователей для URL "
+		return "❗ Произошла ошибка при удалении URL ❗"
 	}
 
-	users := strings.Split(users_id, ",")
-	if len(users) == 1 && users[0] == "" {
-		users = make([]string, 0)
-	}
-	for i, s := range users {
-		if s == strconv.Itoa(user_id) {
-			users = append(users[:i], users[i+1:]...)
-			break
-		}
-	}
-
-	users_id = strings.Join(users, ",")
-	if len(users_id) == 0 {
-		_, err = DB.DB.Exec("DELETE FROM sites WHERE site_id = ?", site_id)
-		if err != nil {
-			log.Fatal(err)
-			return " Произошла ошибка при удалении URL "
-		}
-	} else {
-		_, err = DB.DB.Exec("UPDATE sites SET users = ? WHERE site_id = ?", users_id, site_id)
-		if err != nil {
-			log.Fatal(err)
-			return " Произошла ошибка при обновлении списка пользователей для URL "
-		}
-	}
-
-	var sites_id string
-	err = DB.DB.QueryRow("SELECT sites FROM users WHERE user_id=?", user_id).Scan(&sites_id)
+	var sites_str string
+	err = DB.DB.QueryRow("SELECT sites FROM users WHERE user_id=?", user_id).Scan(&sites_str)
 	if err != nil {
 		log.Fatal(err)
-		return " Произошла ошибка при получении списка URL пользователя "
+		return "❗ Произошла ошибка при получении списка URL пользователя ❗"
 	}
 
-	sites := strings.Split(sites_id, ",")
+	sites := strings.Split(sites_str, ",")
 	if len(sites) == 1 && sites[0] == "" {
 		sites = make([]string, 0)
 	}
@@ -155,11 +112,11 @@ func DelUrl(user_id, site_id int, url string) string {
 		}
 	}
 
-	sites_id = strings.Join(sites, ",")
-	_, err = DB.DB.Exec("UPDATE users SET sites = ? WHERE user_id = ?", sites_id, user_id)
+	sites_str = strings.Join(sites, ",")
+	_, err = DB.DB.Exec("UPDATE users SET sites = ? WHERE user_id = ?", sites_str, user_id)
 	if err != nil {
 		log.Fatal(err)
-		return " Произошла ошибка при обновлении списка URL пользователя "
+		return "❗ Произошла ошибка при обновлении списка URL пользователя ❗"
 	}
 
 	return "[URL](" + url + ") успешно удален ✔️"
@@ -221,7 +178,7 @@ func CheckUpdatesOnAllSites() {
 	var wg sync.WaitGroup
 	for rows.Next() {
 		var site Site
-		if err := rows.Scan(&site.site_id, &site.url, &site.data, &site.users_id); err != nil {
+		if err := rows.Scan(&site.site_id, &site.url, &site.data, &site.users_id, &site.ranges); err != nil {
 			log.Fatal(err)
 		}
 		wg.Add(1)
