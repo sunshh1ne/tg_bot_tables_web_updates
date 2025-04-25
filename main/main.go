@@ -40,6 +40,9 @@ func AddUrl(user_id int, msg string) string {
 
 	strs := strings.Split(msg, "\n")
 	url := strs[0]
+	for len(url) > 0 && url[len(url)-1] == ' ' {
+		url = url[:len(url)-1]
+	}
 	ranges := ""
 	if len(strs) > 1 {
 		ranges = strs[1]
@@ -47,10 +50,9 @@ func AddUrl(user_id int, msg string) string {
 
 	site_id := GenerateID()
 	data, err := parser.ParseSite(url)
-	flag := true
 	if err != nil {
-		data = "Произошла ошибка при получении данных с сайта"
-		flag = false
+		data = " Ошибка при получении данных с сайта. Возможно, вы забыли добавить префикс http:// или https:// в начале URL. "
+		return data
 	}
 	_, err = DB.DB.Exec("INSERT INTO sites VALUES (?, ?, ?, ?, ?);", site_id, url, data, user_id, ranges)
 	if err != nil {
@@ -77,25 +79,15 @@ func AddUrl(user_id int, msg string) string {
 		log.Fatal(err)
 	}
 
-	if flag {
-		return "Успешно добавлен [URL](" + url + ") 🔗"
-	}
-	return "Успешно добавлен [URL](" + url + ") 🔗\n" + "Предупреждение:\n" +
-		" Ошибка при получении данных с сайта. Возможно, вы забыли добавить префикс http:// или https:// в начале URL. "
+	return "Успешно добавлен [URL](" + url + ") 🔗"
 }
 
 func DelUrl(user_id, site_id int, url string) string {
 	MU.Lock()
 	defer MU.Unlock()
 
-	_, err := DB.DB.Exec("DELETE FROM sites WHERE site_id = ?", site_id)
-	if err != nil {
-		log.Fatal(err)
-		return "❗ Произошла ошибка при удалении URL ❗"
-	}
-
 	var sites_str string
-	err = DB.DB.QueryRow("SELECT sites FROM users WHERE user_id=?", user_id).Scan(&sites_str)
+	err := DB.DB.QueryRow("SELECT sites FROM users WHERE user_id=?", user_id).Scan(&sites_str)
 	if err != nil {
 		log.Fatal(err)
 		return "❗ Произошла ошибка при получении списка URL пользователя ❗"
@@ -105,11 +97,24 @@ func DelUrl(user_id, site_id int, url string) string {
 	if len(sites) == 1 && sites[0] == "" {
 		sites = make([]string, 0)
 	}
+
+	flag := 0
 	for i, s := range sites {
 		if s == strconv.Itoa(site_id) {
 			sites = append(sites[:i], sites[i+1:]...)
+			flag = 1
 			break
 		}
+	}
+
+	if flag == 0 {
+		return "У вас не добавлен этот сайт :)"
+	}
+
+	_, err = DB.DB.Exec("DELETE FROM sites WHERE site_id = ?", site_id)
+	if err != nil {
+		log.Fatal(err)
+		return "❗ Произошла ошибка при удалении URL ❗"
 	}
 
 	sites_str = strings.Join(sites, ",")
@@ -131,24 +136,35 @@ func CheckUpdateOnSite(site Site) {
 		return
 	}
 
-	before, after := parser.GetDifferences(site.data, new_data)
-	before = before[:min(len(before), cfg.Maxlength)]
-	if len(before) == cfg.Maxlength {
-		before += "\n,,,всё содержимое не поместилось,,,"
+	before, after := parser.GetDifferences(site.data, new_data, site.ranges)
+	if before == nil {
+		_, err = DB.DB.Exec("UPDATE sites SET data = ? WHERE site_id = ?", new_data, site.site_id)
+		if err != nil {
+			log.Fatal(err)
+		}
+		return
 	}
-	after = after[:min(len(after), cfg.Maxlength)]
-	if len(after) == cfg.Maxlength {
-		after += "\n,,,всё содержимое не поместилось,,,"
+	before = before[:min(len(before), cfg.Maxlength)]
+	flag := false
+	if len(before) == cfg.Maxlength {
+		flag = true
 	}
 
-	text := fmt.Sprintf("ИЗМЕНЕНИЕ НА: %s 🔗\n"+
-		"БЫЛО:\n"+
-		"```html\n"+
-		"%s```\n"+
-		"СТАЛО:\n"+
-		"```html\n"+
-		"%s```",
-		"[URL]("+site.url+")", before, after)
+	after = after[:min(len(after), cfg.Maxlength)]
+	if len(after) == cfg.Maxlength {
+		flag = true
+	}
+
+	changes := ""
+	for i := 0; i < len(before); i++ {
+		changes += "БЫЛО:\n" + "```html\n" + before[i] + "```\n" + "СТАЛО:\n" + "```html\n" + after[i] + "```\n" + "\n"
+	}
+	if flag {
+		changes += "Все не поместилось\n"
+	}
+
+	text := fmt.Sprintf("ИЗМЕНЕНИЕ НА: %s 🔗\n"+changes,
+		"[URL]("+site.url+")")
 
 	users := strings.Split(site.users_id, ",")
 	if len(users) == 1 && users[0] == "" {
@@ -208,6 +224,12 @@ func CatchCallbackQuery(update tgbotapi.Update) {
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	err = DB.DB.QueryRow("SELECT EXISTS(SELECT 1 FROM sites WHERE site_id = ?);", site_id).Scan(&exists)
+	if err != nil || !exists {
+		return
+	}
+
 	var url string
 	err = DB.DB.QueryRow("SELECT url FROM sites WHERE site_id=?", site_id).Scan(&url)
 	if err != nil {
@@ -329,6 +351,7 @@ func CatchMessage(update tgbotapi.Update) {
 
 func main() {
 	cfg = config.LoadConfig("config.json")
+
 	DB.Init()
 	defer func(DB *sql.DB) {
 		err := DB.Close()
