@@ -4,9 +4,12 @@ import (
 	"fmt"
 	"golang.org/x/net/html"
 	"log"
+	"math"
 	"net/http"
 	"strconv"
 )
+
+var INF int = math.MaxInt
 
 func getNodeID(n *html.Node) string {
 	for _, attr := range n.Attr {
@@ -64,9 +67,16 @@ func ParseSite(url string) (string, error) {
 
 func checkRange(ranges string) bool {
 	var list []uint8
+	flag := false
 	for i := 0; i < len(ranges); i++ {
 		if ranges[i] < '0' || ranges[i] > '9' {
 			list = append(list, ranges[i])
+			if flag {
+				return false
+			}
+			flag = true
+		} else {
+			flag = false
 		}
 	}
 
@@ -147,11 +157,15 @@ func getText(data string, pos int) string {
 }
 
 func GetDifferences(data1, data2, ranges string) ([]string, []string) {
-	if !checkRange(ranges) {
-		return nil, nil
-	}
+	var x1, x2 int
+	var y1, y2 string
 
-	x1, y1, x2, y2 := rangeParse(ranges)
+	if !checkRange(ranges) {
+		x1, x2 = -INF, INF
+		y1, y2 = strconv.Itoa(0), strconv.Itoa(INF)
+	} else {
+		x1, y1, x2, y2 = rangeParse(ranges)
+	}
 
 	l, r := 0, 0
 	x := 0
@@ -211,9 +225,10 @@ func GetDifferences(data1, data2, ranges string) ([]string, []string) {
 		}
 		if !(y1_val > y_val || y2_val < y_val || x1 > x) {
 			text1, text2 := getText(data1, l), getText(data2, r)
+			y_data_1 := strconv.Itoa(y_val + 1)
 			if text1 != text2 {
-				before = append(before, "Ячейка "+strconv.Itoa(x)+":"+y_data+" Значение: "+text1)
-				after = append(after, "Ячейка "+strconv.Itoa(x)+":"+y_data+" Значение: "+text2)
+				before = append(before, "Ячейка "+strconv.Itoa(x)+":"+y_data_1+" Значение: "+text1)
+				after = append(after, "Ячейка "+strconv.Itoa(x)+":"+y_data_1+" Значение: "+text2)
 			}
 		}
 

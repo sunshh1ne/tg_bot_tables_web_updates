@@ -137,13 +137,6 @@ func CheckUpdateOnSite(site Site) {
 	}
 
 	before, after := parser.GetDifferences(site.data, new_data, site.ranges)
-	if before == nil {
-		_, err = DB.DB.Exec("UPDATE sites SET data = ? WHERE site_id = ?", new_data, site.site_id)
-		if err != nil {
-			log.Fatal(err)
-		}
-		return
-	}
 	before = before[:min(len(before), cfg.Maxlength)]
 	flag := false
 	if len(before) == cfg.Maxlength {
@@ -289,7 +282,7 @@ func CatchCommand(update tgbotapi.Update) {
 	command := update.Message.Command()
 	switch command {
 	case "start":
-		bot.SendMessage(user_id, "Привет!\nЯ помогу отслеживать изменения на странице в интернете.\n\nДля добавления страницы просто отправьте мне URL нужной вам страницы. Добавлять с префиксом 'http://' или 'https://'.\n\nДля удаления страницы введите команду /del.")
+		bot.SendMessage(user_id, "Привет!\nЯ помогу отслеживать изменения на онлайн-таблице.\n\nДля добавления таблицы просто отправьте мне URL нужной вам таблицы\nДобавлять с префиксом 'http://' или 'https://'.\n\nДля удаления страницы введите команду /del.\nДля поиска уточняющей информации введите команду /help.")
 	case "del":
 		var sites_id string
 		err := DB.DB.QueryRow("SELECT sites FROM users WHERE user_id=?", user_id).Scan(&sites_id)
@@ -326,6 +319,8 @@ func CatchCommand(update tgbotapi.Update) {
 				panic(err)
 			}
 		}
+	case "help":
+		bot.SendMessage(user_id, "1. Для добавления онлайн-таблицы просто пришлите мне ссылку на нее. Если вас интересует конкретный диапазон данных, то введите его в формате x1:y1-x2:y2 (без пробелов, такой формат задает прямоугольник с левым верхним углом в ячейке x1:y1 и правым нижним в ячейке x2:y2), в одном сообщении после ссылки на таблицу.\n\n2. Всего вы можете добавить не более 15 онлайн таблиц.\n\n3.Если вы ввели неверный диапазон данных, то автоматически будете получать уведомления обо всех изменениях в таблице.\n\n4. Таблицы обновляются каждую 1 минуту и, соответственно, об изменениях вы узнаете сразу же после обновления.")
 	}
 }
 

@@ -17,4 +17,5 @@ func (dbs *DataBaseSites) Init() {
 		log.Fatal(err)
 	}
 	dbs.DB = DB
+
 }
