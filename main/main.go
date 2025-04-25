@@ -28,6 +28,7 @@ type Site struct {
 	data     string
 	users_id string
 	ranges   string
+	name     string
 }
 
 func GenerateID() string {
@@ -49,12 +50,12 @@ func AddUrl(user_id int, msg string) string {
 	}
 
 	site_id := GenerateID()
-	data, err := parser.ParseSite(url)
+	data, name, err := parser.ParseSite(url)
 	if err != nil {
 		data = " Ошибка при получении данных с сайта. Возможно, вы забыли добавить префикс http:// или https:// в начале URL. "
 		return data
 	}
-	_, err = DB.DB.Exec("INSERT INTO sites VALUES (?, ?, ?, ?, ?);", site_id, url, data, user_id, ranges)
+	_, err = DB.DB.Exec("INSERT INTO sites VALUES (?, ?, ?, ?, ?, ?);", site_id, url, data, user_id, ranges, name)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -128,9 +129,24 @@ func DelUrl(user_id, site_id int, url string) string {
 }
 
 func CheckUpdateOnSite(site Site) {
-	new_data, err := parser.ParseSite(site.url)
+	new_data, name, err := parser.ParseSite(site.url)
 	if err != nil {
 		new_data = "Произошла ошибка при получении данных с сайта "
+	}
+
+	users := strings.Split(site.users_id, ",")
+	if len(users) == 1 && users[0] == "" {
+		users = make([]string, 0)
+	}
+
+	if site.name != name {
+		text := fmt.Sprintf("Таблица сменила название: %s 🔗\n"+"Было: "+site.name+"\nСтало: "+name,
+			"[URL]("+site.url+")")
+		user_id, err := strconv.Atoi(users[0])
+		if err != nil {
+			log.Fatal(err)
+		}
+		bot.SendMessage(user_id, text)
 	}
 	if site.data == new_data {
 		return
@@ -159,10 +175,6 @@ func CheckUpdateOnSite(site Site) {
 	text := fmt.Sprintf("ИЗМЕНЕНИЕ НА: %s 🔗\n"+changes,
 		"[URL]("+site.url+")")
 
-	users := strings.Split(site.users_id, ",")
-	if len(users) == 1 && users[0] == "" {
-		users = make([]string, 0)
-	}
 	for i := 0; i < len(users); i++ {
 		user_id, err := strconv.Atoi(users[i])
 		if err != nil {
@@ -187,7 +199,7 @@ func CheckUpdatesOnAllSites() {
 	var wg sync.WaitGroup
 	for rows.Next() {
 		var site Site
-		if err := rows.Scan(&site.site_id, &site.url, &site.data, &site.users_id, &site.ranges); err != nil {
+		if err := rows.Scan(&site.site_id, &site.url, &site.data, &site.users_id, &site.ranges, &site.name); err != nil {
 			log.Fatal(err)
 		}
 		wg.Add(1)
@@ -299,13 +311,13 @@ func CatchCommand(update tgbotapi.Update) {
 		} else {
 			var rows [][]tgbotapi.InlineKeyboardButton
 			for _, site_id := range sites {
-				var url string
-				err = DB.DB.QueryRow("SELECT url FROM sites WHERE site_id=?", site_id).Scan(&url)
+				var name string
+				err = DB.DB.QueryRow("SELECT name FROM sites WHERE site_id=?", site_id).Scan(&name)
 				if err != nil {
 					log.Fatal(err)
 				}
 
-				btn := tgbotapi.NewInlineKeyboardButtonData(url, site_id)
+				btn := tgbotapi.NewInlineKeyboardButtonData(name, site_id)
 				row := tgbotapi.NewInlineKeyboardRow(btn)
 				rows = append(rows, row)
 			}

@@ -20,26 +20,30 @@ func getNodeID(n *html.Node) string {
 	return ""
 }
 
-func ParseSite(url string) (string, error) {
+func ParseSite(url string) (string, string, error) {
 	response, err := http.Get(url)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	defer response.Body.Close()
 
 	doc, err := html.Parse(response.Body)
 	if err != nil {
 		fmt.Println("Error:", err)
-		return "", err
+		return "", "", err
 	}
 
 	ret := ""
 	counter := 0
+	name := ""
 	var processAllProduct func(*html.Node, bool)
 	processAllProduct = func(n *html.Node, flag bool) {
 		if getNodeID(n) == "grid-bottom-bar" || (n.Type == html.ElementNode && n.Data == "th") {
 
 			return
+		}
+		if n.Type == html.ElementNode && n.Data == "title" {
+			name = n.FirstChild.Data
 		}
 		if flag && n.Type == html.TextNode {
 			ret += string('\x01') + strconv.Itoa(counter) + string('\x01')
@@ -62,7 +66,7 @@ func ParseSite(url string) (string, error) {
 		}
 	}
 	processAllProduct(doc, false)
-	return ret, nil
+	return ret, name, nil
 }
 
 func checkRange(ranges string) bool {
