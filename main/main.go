@@ -140,12 +140,13 @@ func CheckUpdateOnSite(site Site) {
 	}
 
 	if site.name != name {
-		text := fmt.Sprintf("Таблица сменила название: %s 🔗\n"+"Было: "+site.name+"\nСтало: "+name,
+		text := fmt.Sprintf("Таблица сменила название: %s 🔗\n"+"Было: "+"```html\n"+site.name+"```\n"+"\nСтало: "+"```html\n"+name+"```\n",
 			"[URL]("+site.url+")")
 		user_id, err := strconv.Atoi(users[0])
 		if err != nil {
 			log.Fatal(err)
 		}
+		_, err = DB.DB.Exec("UPDATE sites SET name = ? WHERE site_id = ?", name, site.site_id)
 		bot.SendMessage(user_id, text)
 	}
 	if site.data == new_data {
