@@ -7,6 +7,7 @@ import (
 	"math"
 	"net/http"
 	"strconv"
+	"strings"
 )
 
 var INF int = math.MaxInt
@@ -44,6 +45,16 @@ func ParseSite(url string) (string, string, error) {
 		}
 		if n.Type == html.ElementNode && n.Data == "title" {
 			name = n.FirstChild.Data
+			words := strings.Split(name, " ")
+			if len(words) > 2 && words[len(words)-3] == "-" && words[len(words)-2] == "Google" {
+				name = ""
+				for i := 0; i < len(words)-3; i++ {
+					name += words[i]
+					if i+1 < len(words)-3 {
+						name += " "
+					}
+				}
+			}
 		}
 		if flag && n.Type == html.TextNode {
 			ret += string('\x01') + strconv.Itoa(counter) + string('\x01')
