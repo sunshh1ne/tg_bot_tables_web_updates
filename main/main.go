@@ -131,7 +131,7 @@ func DelUrl(user_id, site_id int, url string) string {
 func CheckUpdateOnSite(site Site) {
 	new_data, name, err := parser.ParseSite(site.url)
 	if err != nil {
-		new_data = "Произошла ошибка при получении данных с сайта "
+		return
 	}
 
 	users := strings.Split(site.users_id, ",")
